@@ -92,7 +92,7 @@ EXAMPLES.forEach(t=>{
 });
 
 function esc(s){ return s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
-function linkCites(s){ return esc(s).replace(/\[(\d+)\]/g, '<span class="cite" data-n="$1">[$1]</span>'); }
+function linkCites(s){ return esc(s).replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, '<span class="cite">[$1]</span>'); }
 
 document.getElementById('f').addEventListener('submit', async (e)=>{
   e.preventDefault();
