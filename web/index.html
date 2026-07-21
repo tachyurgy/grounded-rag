@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>grounded-rag — a RAG service that refuses to hallucinate</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#171a21; --edge:#252a34; --text:#e6e9ef; --muted:#9aa4b2;
+    --accent:#5b8cff; --good:#31c48d; --bad:#f0616d; --chip:#1f2530;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg); color:var(--text); }
+  .wrap { max-width:860px; margin:0 auto; padding:40px 20px 80px; }
+  header h1 { font-size:26px; margin:0 0 6px; letter-spacing:-0.02em; }
+  header p { color:var(--muted); margin:0 0 4px; }
+  .meta { font-size:13px; color:var(--muted); margin-top:8px; }
+  .meta code { background:var(--chip); padding:2px 6px; border-radius:5px; }
+  form { display:flex; gap:10px; margin:26px 0 10px; }
+  input[type=text] { flex:1; background:var(--panel); border:1px solid var(--edge); color:var(--text);
+    padding:13px 15px; border-radius:10px; font-size:15px; outline:none; }
+  input[type=text]:focus { border-color:var(--accent); }
+  button { background:var(--accent); color:#fff; border:0; padding:0 20px; border-radius:10px;
+    font-size:15px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .examples { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+  .examples button { background:var(--chip); color:var(--muted); font-weight:500; padding:6px 11px;
+    font-size:13px; border:1px solid var(--edge); }
+  .card { background:var(--panel); border:1px solid var(--edge); border-radius:12px; padding:20px;
+    margin-top:18px; }
+  .badge { display:inline-flex; align-items:center; gap:7px; font-size:13px; font-weight:600;
+    padding:5px 11px; border-radius:20px; }
+  .badge.good { background:rgba(49,196,141,.14); color:var(--good); }
+  .badge.bad { background:rgba(240,97,109,.14); color:var(--bad); }
+  .answer { margin:16px 0 4px; white-space:pre-wrap; }
+  .answer .cite { color:var(--accent); font-weight:600; cursor:pointer; }
+  h3 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
+    margin:22px 0 10px; }
+  .src { border-left:3px solid var(--edge); padding:8px 0 8px 14px; margin:10px 0; }
+  .src.hi { border-left-color:var(--accent); }
+  .src .h { font-size:13px; color:var(--muted); margin-bottom:4px; }
+  .src .n { color:var(--accent); font-weight:700; }
+  .src .t { font-size:13.5px; color:#c9d1dc; }
+  .footer { margin-top:36px; font-size:13px; color:var(--muted); }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>grounded-rag</h1>
+    <p>A retrieval-augmented Q&amp;A service that <strong>refuses to hallucinate</strong> — every
+       answer is grounded in retrieved sources, cited inline, and verified before you see it.</p>
+    <div class="meta" id="meta">loading corpus…</div>
+  </header>
+
+  <div class="examples" id="examples"></div>
+  <form id="f">
+    <input type="text" id="q" placeholder="Ask about RAG, chunking, embeddings, vector DBs, agents…" autocomplete="off">
+    <button id="go" type="submit">Ask</button>
+  </form>
+
+  <div id="out"></div>
+
+  <div class="footer">
+    Ask over an 8-document handbook on RAG &amp; LLM engineering. The green/red badge is a
+    deterministic grounding check: it rejects out-of-range citations and claims that don't
+    overlap the source they cite. Built with FastAPI · LangChain · Gemini · a SQLite vector store.
+  </div>
+</div>
+
+<script>
+const EXAMPLES = [
+  "What chunk size and overlap should I use?",
+  "How does HNSW work and when should I use it?",
+  "How do you stop a RAG system from hallucinating?",
+  "When should I use an agent instead of plain RAG?",
+];
+const out = document.getElementById('out');
+
+fetch('/stats').then(r=>r.json()).then(s=>{
+  document.getElementById('meta').innerHTML =
+    `<code>${s.chunks}</code> chunks indexed · model <code>${s.chat_model}</code> · embeddings <code>${s.embed_model}</code>`;
+});
+
+const ex = document.getElementById('examples');
+EXAMPLES.forEach(t=>{
+  const b=document.createElement('button'); b.type='button'; b.textContent=t;
+  b.onclick=()=>{ document.getElementById('q').value=t; document.getElementById('f').requestSubmit(); };
+  ex.appendChild(b);
+});
+
+function esc(s){ return s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function linkCites(s){ return esc(s).replace(/\[(\d+)\]/g, '<span class="cite" data-n="$1">[$1]</span>'); }
+
+document.getElementById('f').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const q = document.getElementById('q').value.trim();
+  if(!q) return;
+  const go = document.getElementById('go'); go.disabled = true;
+  out.innerHTML = `<div class="card"><div class="answer" id="ans"></div></div><div id="srcs"></div>`;
+  const ans = document.getElementById('ans');
+  let sources = [], text = "";
+
+  try {
+    const resp = await fetch('/ask/stream', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({question:q})
+    });
+    const reader = resp.body.getReader(), dec = new TextDecoder();
+    let buf = "";
+    while(true){
+      const {value, done} = await reader.read(); if(done) break;
+      buf += dec.decode(value, {stream:true});
+      let idx;
+      while((idx = buf.indexOf("\n\n")) >= 0){
+        const frame = buf.slice(0, idx); buf = buf.slice(idx+2);
+        const ev = (frame.match(/^event: (.*)$/m)||[])[1];
+        const data = (frame.match(/^data: ([\s\S]*)$/m)||[])[1];
+        if(!ev) continue;
+        if(ev==='sources'){ sources = JSON.parse(data); renderSources(sources, []); }
+        else if(ev==='token'){ text += JSON.parse(data); ans.innerHTML = linkCites(text); }
+        else if(ev==='grounding'){ renderGrounding(JSON.parse(data), sources); }
+      }
+    }
+  } catch(err){ ans.textContent = "Error: " + err.message; }
+  go.disabled = false;
+});
+
+function renderGrounding(g, sources){
+  const card = out.querySelector('.card');
+  const badge = document.createElement('div');
+  badge.className = 'badge ' + (g.grounded ? 'good' : 'bad');
+  badge.innerHTML = g.grounded
+    ? `✓ Grounded · ${g.citations.length} citations · ${(g.score*100|0)}% support`
+    : `✕ Not fully grounded${g.invalid_citations.length?` · invalid citation ${g.invalid_citations.join(',')}`:''}${g.unsupported.length?` · ${g.unsupported.length} unsupported`:''}`;
+  card.insertBefore(badge, card.firstChild);
+  renderSources(sources, g.citations);
+}
+
+function renderSources(sources, cited){
+  const el = document.getElementById('srcs'); if(!el) return;
+  el.innerHTML = '<h3>Retrieved sources</h3>' + sources.map(s=>`
+    <div class="src ${cited.includes(s.n)?'hi':''}">
+      <div class="h"><span class="n">[${s.n}]</span> ${esc(s.source)} · score ${s.score}</div>
+      <div class="t">${esc(s.text.slice(0,280))}${s.text.length>280?'…':''}</div>
+    </div>`).join('');
+}
+</script>
+</body>
+</html>

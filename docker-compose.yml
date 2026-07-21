@@ -1,0 +1,15 @@
+services:
+  grounded-rag:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Provide a key to enable grounded Gemini generation; omit to run offline.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      DB_PATH: /data/grounded.db
+    volumes:
+      - grounded_data:/data
+    restart: unless-stopped
+
+volumes:
+  grounded_data:

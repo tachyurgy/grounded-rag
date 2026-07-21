@@ -1,0 +1,47 @@
+# Reference Kubernetes manifest. The live demo runs as a single Docker container
+# behind a reverse proxy; this shows the same service deployed to a cluster.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grounded-rag
+  labels: { app: grounded-rag }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: grounded-rag }
+  template:
+    metadata:
+      labels: { app: grounded-rag }
+    spec:
+      containers:
+        - name: grounded-rag
+          image: ghcr.io/tachyurgy/grounded-rag:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef: { name: grounded-rag, key: gemini-api-key }
+            - name: DB_PATH
+              value: /data/grounded.db
+          readinessProbe:
+            httpGet: { path: /up, port: 8000 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /up, port: 8000 }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grounded-rag
+spec:
+  selector: { app: grounded-rag }
+  ports:
+    - port: 80
+      targetPort: 8000
