@@ -102,9 +102,7 @@ class RagEngine:
     def answer(self, query: str, k: int | None = None) -> Answer:
         sources = self.retrieve(query, k=k)
         text = self.llm._generate(self._messages(query, sources)).generations[0].message.content
-        report = verify_grounding(
-            text, [s.text for s in sources], threshold=self.settings.grounding_threshold
-        )
+        report = self.ground(text, sources)
         return Answer(answer=text, sources=sources, grounding=report)
 
     def stream_answer(self, query: str, k: int | None = None):
@@ -120,8 +118,14 @@ class RagEngine:
         return sources, tokens
 
     def ground(self, text: str, sources: list[Source]) -> GroundingReport:
+        # Semantic grounding when a real embedding model is available; the lexical
+        # check remains as a fast fallback for the offline/hashing case.
+        embed_fn = self.embeddings.embed_query if self.settings.has_key else None
         return verify_grounding(
-            text, [s.text for s in sources], threshold=self.settings.grounding_threshold
+            text,
+            [s.text for s in sources],
+            threshold=self.settings.grounding_threshold,
+            embed_fn=embed_fn,
         )
 
     # -- agent --------------------------------------------------------------

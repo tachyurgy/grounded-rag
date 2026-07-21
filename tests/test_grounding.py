@@ -72,3 +72,28 @@ def test_answer_with_no_citations_is_never_grounded():
 def test_support_score_range():
     assert support_score("proximity graph recall latency", SOURCES[0]) > 0.5
     assert support_score("kubernetes autoscaling metrics", SOURCES[0]) == 0.0
+
+
+def test_stemming_matches_morphological_variants():
+    # "maps"/"mapping" and "meaning"/"meanings" should count as the same token.
+    src = ["An embedding maps text to a vector so similar meanings are near."]
+    answer = "Embedding mapping keeps similar meaning vectors near [1]."
+    assert verify_grounding(answer, src).grounded is True
+
+
+def test_semantic_backstop_supports_paraphrase_rejects_offtopic():
+    # A faithful paraphrase has LOW lexical overlap but HIGH semantic similarity;
+    # the embedding backstop must accept it — while still rejecting an off-topic claim.
+    sources = ["An embedding maps text to a dense vector so similar texts land near each other."]
+    paraphrase = "Embeddings position semantically alike passages close together in the space [1]."
+    offtopic = "Kubernetes schedules pods across worker nodes for high availability [1]."
+
+    def embed_fn(t: str) -> list[float]:
+        on_topic = any(
+            w in t.lower()
+            for w in ("embedding", "vector", "position", "close", "passage", "text", "space")
+        )
+        return [1.0, 0.0] if on_topic else [0.0, 1.0]
+
+    assert verify_grounding(paraphrase, sources, embed_fn=embed_fn).grounded is True
+    assert verify_grounding(offtopic, sources, embed_fn=embed_fn).grounded is False

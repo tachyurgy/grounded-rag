@@ -28,8 +28,10 @@ tests — see [`app/grounding.py`](app/grounding.py) and
 [`tests/test_grounding.py`](tests/test_grounding.py).
 
 An answer is **grounded** only if: it contains at least one citation, every cited
-index refers to a source that was actually retrieved, and every substantive
-sentence lexically overlaps the source it cites above a threshold.
+index refers to a source that was actually retrieved, and every substantive sentence
+is *supported* by the source it cites — checked **semantically** (cosine of the
+sentence embedding vs the cited source, so faithful paraphrase passes) with a stemmed
+lexical-overlap check as a fast fallback.
 
 ## Stack
 
@@ -55,7 +57,7 @@ hashing embeddings and a labelled stub LLM, so CI and local dev need no secrets.
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest                     # 30 tests, hermetic (no key needed)
+pytest                     # 32 tests, hermetic (no key needed)
 
 export GEMINI_API_KEY=...  # optional: enables real grounded generation
 uvicorn app.main:app --reload
@@ -96,7 +98,7 @@ curl -s localhost:8000/ask -H 'content-type: application/json' \
 
 ## Corpus
 
-The demo indexes an 8-document handbook on RAG & LLM engineering
+The demo indexes a 15-document handbook on RAG & LLM engineering
 ([`data/corpus/`](data/corpus)) — RAG overview, chunking, embeddings, vector
 databases, retrieval strategies, grounding, agents, and evaluation. Drop your own
 `.md` files in and restart to index a different knowledge base.
@@ -104,7 +106,7 @@ databases, retrieval strategies, grounding, agents, and evaluation. Drop your ow
 ## Tests
 
 ```bash
-pytest                 # 30 tests
+pytest                 # 32 tests
 ruff check app tests   # lint
 ```
 

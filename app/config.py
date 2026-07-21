@@ -16,7 +16,7 @@ class Settings:
     chunk_size: int = 900
     chunk_overlap: int = 150
     top_k: int = 4
-    grounding_threshold: float = 0.45
+    grounding_threshold: float = 0.35
     request_timeout: float = 45.0
 
     @property
@@ -40,6 +40,6 @@ def get_settings() -> Settings:
         chunk_size=int(os.getenv("CHUNK_SIZE", "900")),
         chunk_overlap=int(os.getenv("CHUNK_OVERLAP", "150")),
         top_k=int(os.getenv("TOP_K", "4")),
-        grounding_threshold=float(os.getenv("GROUNDING_THRESHOLD", "0.45")),
+        grounding_threshold=float(os.getenv("GROUNDING_THRESHOLD", "0.35")),
         request_timeout=float(os.getenv("REQUEST_TIMEOUT", "45")),
     )
