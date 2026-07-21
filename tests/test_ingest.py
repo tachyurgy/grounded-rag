@@ -25,3 +25,13 @@ def test_ordinals_are_sequential_per_source():
         by_source.setdefault(c.source, []).append(c.ordinal)
     for ordinals in by_source.values():
         assert ordinals == list(range(len(ordinals)))
+
+
+def test_corpus_fingerprint_changes_with_content(tmp_path):
+    from app.ingest import corpus_fingerprint
+
+    (tmp_path / "a.md").write_text("alpha content here")
+    fp1 = corpus_fingerprint(str(tmp_path))
+    assert corpus_fingerprint(str(tmp_path)) == fp1  # stable
+    (tmp_path / "b.md").write_text("beta content here")
+    assert corpus_fingerprint(str(tmp_path)) != fp1  # changed corpus -> new fp

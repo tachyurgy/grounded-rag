@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import glob
+import hashlib
 import os
 from dataclasses import dataclass
 
@@ -39,3 +40,14 @@ def load_corpus(corpus_dir: str, size: int = 900, overlap: int = 150) -> list[Ch
         for i, piece in enumerate(_split(body, size, overlap)):
             chunks.append(Chunk(text=piece, source=source, ordinal=i))
     return chunks
+
+
+def corpus_fingerprint(corpus_dir: str) -> str:
+    """A hash of every corpus file's name + content, so the index rebuilds
+    automatically whenever the corpus changes (e.g. across a redeploy)."""
+    h = hashlib.md5()
+    for path in sorted(glob.glob(os.path.join(corpus_dir, "*.md"))):
+        h.update(os.path.basename(path).encode())
+        with open(path, "rb") as fh:
+            h.update(fh.read())
+    return h.hexdigest()

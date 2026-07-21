@@ -18,12 +18,19 @@ engine = RagEngine(settings)
 WEB_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
 
 
+_indexed = False
+
+
 def ensure_indexed() -> None:
-    """Index the corpus, tolerating a transient embedding failure at boot so the
-    container never crash-loops — retrieval retries indexing on first use."""
+    """Index the corpus once, tolerating a transient embedding failure at boot so
+    the container never crash-loops — retrieval retries indexing on first use.
+    ``index_corpus`` itself rebuilds only when the corpus fingerprint changed."""
+    global _indexed
+    if _indexed:
+        return
     try:
-        if engine.store.count() == 0:
-            engine.index_corpus()
+        engine.index_corpus()
+        _indexed = True
     except Exception as exc:  # noqa: BLE001
         log.warning("corpus indexing deferred: %s", exc)
 

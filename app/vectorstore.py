@@ -32,6 +32,7 @@ class SQLiteVectorStore(VectorStore):
             "  vec BLOB NOT NULL,"
             "  dim INTEGER NOT NULL)"
         )
+        self._conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
         self._conn.commit()
         self._matrix: np.ndarray | None = None
         self._rows: list[tuple[int, str, dict]] = []
@@ -43,6 +44,21 @@ class SQLiteVectorStore(VectorStore):
 
     def count(self) -> int:
         return int(self._conn.execute("SELECT COUNT(*) FROM docs").fetchone()[0])
+
+    def get_meta(self, key: str) -> str | None:
+        row = self._conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        self._conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
+        self._conn.commit()
+
+    def clear(self) -> None:
+        self._conn.execute("DELETE FROM docs")
+        self._conn.commit()
+        self._matrix = None
+        self._rows = []
+        self._dirty = True
 
     def add_texts(
         self,

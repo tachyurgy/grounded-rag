@@ -11,7 +11,7 @@ from .agent import Agent, safe_calculator
 from .config import Settings
 from .embeddings import build_embeddings
 from .grounding import GroundingReport, verify_grounding
-from .ingest import load_corpus
+from .ingest import corpus_fingerprint, load_corpus
 from .llm import ChatGemini
 from .vectorstore import SQLiteVectorStore
 
@@ -69,8 +69,12 @@ class RagEngine:
 
     # -- indexing -----------------------------------------------------------
     def index_corpus(self, force: bool = False) -> int:
-        if self.store.count() > 0 and not force:
+        fingerprint = corpus_fingerprint(self.settings.corpus_dir)
+        # Reuse the persisted index only if it matches the current corpus; a changed
+        # corpus (e.g. after a redeploy) rebuilds automatically.
+        if not force and self.store.count() > 0 and self.store.get_meta("corpus_fp") == fingerprint:
             return self.store.count()
+        self.store.clear()
         chunks = load_corpus(
             self.settings.corpus_dir,
             size=self.settings.chunk_size,
@@ -81,6 +85,7 @@ class RagEngine:
                 [c.text for c in chunks],
                 metadatas=[{"source": c.source, "ordinal": c.ordinal} for c in chunks],
             )
+        self.store.set_meta("corpus_fp", fingerprint)
         return self.store.count()
 
     # -- retrieval ----------------------------------------------------------
