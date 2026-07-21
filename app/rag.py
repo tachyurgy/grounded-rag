@@ -17,8 +17,11 @@ from .vectorstore import SQLiteVectorStore
 
 _SYSTEM_PROMPT = (
     "You answer questions using ONLY the numbered sources provided. "
-    "Cite every claim inline with the matching source number in square brackets, "
-    "e.g. [1] or [2]. Do not use any knowledge outside the sources. "
+    "Write in flowing prose (no headings or bullet lists). "
+    "End EVERY sentence that makes a factual claim with the matching source number "
+    "in square brackets, e.g. [1] or [2]; a sentence may cite more than one, e.g. [1, 2]. "
+    "Do not write transitional or summary sentences without a citation. "
+    "Do not use any knowledge outside the sources. "
     "If the sources do not contain the answer, say so plainly and cite nothing. "
     "Be concise and specific."
 )

@@ -111,8 +111,8 @@ def verify_grounding(
     for sentence in _split_sentences(answer):
         cites = [c for c in parse_citations(sentence) if 1 <= c <= len(sources)]
         content = _content_tokens(_CITE.sub("", sentence))
-        if not content:
-            continue  # skip citation-only or trivial fragments
+        if not content or sentence.rstrip().endswith(":"):
+            continue  # skip citation-only fragments and list lead-ins ("...:")
         if not cites:
             checks.append(SentenceCheck(sentence, [], 0.0, False))
             unsupported.append(sentence)
