@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 from fastapi import FastAPI
@@ -11,10 +12,23 @@ from pydantic import BaseModel, Field
 from .config import get_settings
 from .rag import RagEngine
 
+log = logging.getLogger("grounded_rag")
 settings = get_settings()
 engine = RagEngine(settings)
-engine.index_corpus()  # index once at worker boot (idempotent if already populated)
 WEB_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
+
+
+def ensure_indexed() -> None:
+    """Index the corpus, tolerating a transient embedding failure at boot so the
+    container never crash-loops — retrieval retries indexing on first use."""
+    try:
+        if engine.store.count() == 0:
+            engine.index_corpus()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("corpus indexing deferred: %s", exc)
+
+
+ensure_indexed()
 
 app = FastAPI(title="grounded-rag", version="0.1.0")
 
@@ -52,17 +66,20 @@ def index() -> FileResponse:
 
 @app.post("/search")
 def search(req: SearchRequest) -> dict:
+    ensure_indexed()
     sources = engine.retrieve(req.query, k=req.k)
     return {"query": req.query, "sources": [s.as_dict() for s in sources]}
 
 
 @app.post("/ask")
 def ask(req: AskRequest) -> dict:
+    ensure_indexed()
     return engine.answer(req.question, k=req.k).as_dict()
 
 
 @app.post("/ask/stream")
 def ask_stream(req: AskRequest) -> StreamingResponse:
+    ensure_indexed()
     sources, tokens = engine.stream_answer(req.question, k=req.k)
 
     def gen():
