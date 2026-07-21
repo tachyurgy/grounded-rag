@@ -1,5 +1,17 @@
 # Releases
 
+## 2026-07-21 — v0.1.1 semantic grounding + bigger corpus
+- **Changed:** grounding was pure lexical token-overlap, which wrongly flagged
+  faithful paraphrase as "not grounded" (e.g. "what is an embedding"). Now each
+  claim is verified **semantically** (cosine of the sentence embedding vs the
+  cited source) with a stemmed lexical fallback — either signal clears the claim.
+  Corpus grown 8 → 15 docs (45 chunks). Added a corpus-fingerprint so a redeploy
+  with changed docs re-indexes automatically (was serving a stale index from the
+  persistent volume). UI highlights grouped `[1, 4]` citations. 34 tests.
+- **Verified:** live `/stats` = 45 chunks; "what is an embedding" → grounded=true,
+  3 citations, 82% support (was ✕ before); spot-checks across new docs all
+  grounded; UI screenshot clean, 0 page errors.
+
 ## 2026-07-21 — v0.1.0 initial public release
 - **What deployed:** https://rag.levelbrook.com (Docker container on Hetzner Box B
   behind kamal-proxy; auto Let's Encrypt TLS). Public repo:
